@@ -1,0 +1,59 @@
+{
+  "name": "dsh-plugin-rapidspeech",
+  "description": "Local RapidSpeech.cpp ASR provider for the DeepSeek Harness voice input; managed rs-server with on-demand download, or external mode",
+  "version": "0.2.0",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
+    "locale/*.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=24.9.0",
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-experimental-speech-to-text": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess": "0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "~3.19.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-experimental-speech-to-text": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess": "0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "~3.19.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://example.com/dsh-plugin-rapidspeech.git"
+  }
+}

@@ -1,0 +1,10 @@
+# Headless catalog probe: disables the web server rows so the probe can boot beside
+# a running Web UI, then prints the exact SpeechCatalog payload clients render.
+- insert:
+    - id: webserver
+      disabled: true
+    - id: web-runtime
+      disabled: true
+    - id: rapidspeech-catalog-probe
+      name: './catalog-probe.mjs'
+      config: {}

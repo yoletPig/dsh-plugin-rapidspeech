@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "RapidSpeech 本地语音识别",
+    "description": "通过本地 RapidSpeech.cpp rs-server 转写录音；录音前需先启动 rs-server。"
+  }
+}

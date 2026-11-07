@@ -1,0 +1,13 @@
+# Managed-mode probe overlay: the plugin spawns and owns its own rs-server on a
+# free port, transcribes through the registry, and the probe exits.
+- insert:
+    - id: rapidspeech-asr
+      name: dsh-plugin-rapidspeech
+      config:
+        managementMode: managed
+        serverBinaryPath: /home/yyl/RapidSpeech.cpp/build/rs-server
+        modelPath: /home/yyl/RapidSpeech.cpp/gguf_models/xasr-q8_0.gguf
+        serverLibraryPath: /home/yyl/RapidSpeech.cpp/build
+    - id: rapidspeech-probe
+      name: './probe.mjs'
+      config: {}

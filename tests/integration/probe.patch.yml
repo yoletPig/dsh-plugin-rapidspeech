@@ -1,0 +1,6 @@
+# Probe overlay: mounts the probe next to the profile composition. Rows with
+# matching ids are overridden by this later layer; the probe row is new.
+- insert:
+    - id: rapidspeech-probe
+      name: './probe.mjs'
+      config: {}

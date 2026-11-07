@@ -1,0 +1,34 @@
+# Voice input composition for the RapidSpeech.cpp provider.
+#
+# Rows referencing `@deepseek-ai/dsh-experimental-*` resolve from the running dsh
+# installation, which ships the whole experimental voice-input stack. This makes
+# the bundle standalone: installing it brings the full "recording ends -> server
+# transcription -> text into the draft editor" path without SenseVoice.
+#
+# Default deployment is managed mode with auto-download: on first use the plugin
+# fetches the platform rs-server from this repository's GitHub Releases and the
+# SenseVoice GGUF from RapidAI's Hugging Face repo into the dsh home cache
+# (`dshHomePath('rapidspeech')`), verifies the model SHA-256, then spawns the
+# server on an OS-assigned loopback port. Both pieces can be swapped for
+# user-provided files via serverBinaryPath / modelPath.
+#
+# If the official voice-input-bundle is also enabled, later layers win per row:
+# whichever bundle is installed later overrides the speech-to-text row's
+# defaultProvider. Both providers stay registered and switchable in the UI.
+- insert:
+    - id: speech-to-text
+      name: '@deepseek-ai/dsh-experimental-speech-to-text'
+      config:
+        defaultProvider: rapidspeech-local
+    - id: rapidspeech-asr
+      name: dsh-plugin-rapidspeech
+      config:
+        managementMode: managed
+        dataRoot: !!js dshHomePath('rapidspeech')
+        binaryDownloadUrl: 'https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/rapidspeech-linux-x64.tar.gz'
+        modelDownloadUrl: 'https://huggingface.co/RapidAI/RapidSpeech/resolve/main/ASR/SenseVoice/sense-voice-small-q4_k.gguf'
+        modelSha256: '0a2457c53b6c3f3e504df16585dcd0ede9ef5ae023325c70ed547801a9453c0a'
+    - id: api-speech-to-text
+      name: '@deepseek-ai/dsh-experimental-api-speech-to-text'
+    - id: ui-voice-input
+      name: '@deepseek-ai/dsh-experimental-client-ui-voice-input'

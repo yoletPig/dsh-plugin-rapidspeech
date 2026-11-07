@@ -1,0 +1,53 @@
+# Builds the native rs-server per platform and attaches it to the GitHub Release.
+# Assets follow the name convention the plugin downloads by default:
+#   rapidspeech-linux-x64.tar.gz   (rs-server + shared libraries at the archive root)
+name: build-native
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout RapidSpeech.cpp
+        run: git clone --depth 1 https://github.com/RapidAI/RapidSpeech.cpp.git upstream
+
+      - name: Configure and build rs-server
+        run: |
+          cd upstream
+          cmake -B build -DRS_STATIC_EXE=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target rs-server -j"$(nproc)"
+
+      - name: Package binary and shared libraries (flat archive root)
+        run: |
+          cd upstream/build
+          tar -czf "$GITHUB_WORKSPACE/rapidspeech-linux-x64.tar.gz" \
+            rs-server \
+            librapidspeech-core.so* \
+            ggml/src/libggml-*.so*
+          sha256sum "$GITHUB_WORKSPACE/rapidspeech-linux-x64.tar.gz"
+
+      - name: Smoke test the packaged layout
+        run: |
+          mkdir -p /tmp/pkgcheck/bin && tar -xzf rapidspeech-linux-x64.tar.gz -C /tmp/pkgcheck/bin
+          test -x /tmp/pkgcheck/bin/rs-server
+          LD_LIBRARY_PATH=/tmp/pkgcheck/bin /tmp/pkgcheck/bin/rs-server --help > /dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rapidspeech-linux-x64
+          path: rapidspeech-linux-x64.tar.gz
+
+      - name: Attach to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rapidspeech-linux-x64.tar.gz

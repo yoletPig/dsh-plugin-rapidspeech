@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "RapidSpeech ASR (local)",
+    "description": "Transcribe recordings with a local RapidSpeech.cpp rs-server; start rs-server before recording."
+  }
+}
