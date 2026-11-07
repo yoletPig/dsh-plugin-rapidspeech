@@ -26,7 +26,19 @@ dsh --profile rapidspeech
 首次点击麦克风旁的"安装"时，插件会（经用户确认后）下载两样东西到 `~/.dsh/rapidspeech/` 缓存：
 
 1. **rs-server 二进制**：来自本仓库 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases)（CI 自动构建的 `rapidspeech-linux-x64.tar.gz`，二进制 + .so 平铺在压缩包根目录）
-2. **SenseVoice-small-q4_k GGUF 模型**（182 MB）：来自 [RapidAI/RapidSpeech](https://huggingface.co/RapidAI/RapidSpeech) HuggingFace 仓库，SHA-256 固定校验（`0a2457c5…`）
+2. **模型 GGUF**：默认 `xasr-q8_0`（178 MB，ModelScope）；准备 UI 会列出该模型的所有官方镜像供选择，SHA-256 固定校验
+
+### 模型选择
+
+内置目录（`src/models.ts`，均为 RapidAI 官方发布，逐字校验过直链与哈希）：
+
+| modelId | 大小 | 语言 | 下载源 |
+| --- | --- | --- | --- |
+| `xasr-q8_0`（默认） | 178 MB | auto/zh/en | ModelScope |
+| `sense-voice-small-q4_k` | 182 MB | auto/zh/en/yue/ja/ko | HuggingFace、hf-mirror、ModelScope |
+| `funasr-nano-q4_k_m` | 692 MB | auto/zh/en | HuggingFace、ModelScope |
+
+切换：profile 覆盖里设 `modelId`；或 `modelDownloadUrl` 指向任意直链；或 `modelPath` 直接用本地文件（三者按此优先级生效）。X-ASR 官方仅发布在 ModelScope，故 HF 源对它不可选（UI 只列可用源，选错会被显式拒绝、不回退）。
 
 之后完全离线运行；空闲 5 分钟自动回收进程，下次使用自动唤醒（约 2 秒）。
 
@@ -70,8 +82,8 @@ Bundle 的 `cordis.patch.yml` 会插入完整语音输入组合：`speech-to-tex
 | `dataRoot` | `dshHomePath('rapidspeech')` | managed 缓存目录（bin/ 与 models/） |
 | `binaryDownloadUrl` | 本仓库 Releases latest | rs-server 平台压缩包；`serverBinaryPath` 设置后忽略 |
 | `binaryDownloadSha256` | 无（跳过校验） | 下载压缩包的 SHA-256 |
-| `modelDownloadUrl` | HF SenseVoice q4_k | GGUF 下载地址；`modelPath` 设置后忽略 |
-| `modelSha256` | SenseVoice q4_k 固定值 | 模型完整性校验（下载与本地文件通用） |
+| `modelId` | `xasr-q8_0` | 内置目录模型（见上表）；`modelDownloadUrl` 设置后忽略 |
+| `modelSha256` | 无（目录模型自带固定值） | 手动模型时的完整性校验 |
 | `endpoint` | `http://127.0.0.1:8080` | `external` 模式地址；仅允许 loopback 或 `allowedHosts` 白名单 |
 | `serverBinaryPath` / `modelPath` | 无 | 显式指定自备文件（绝对路径），跳过下载 |
 | `serverLibraryPath` | 二进制所在目录 | 动态库目录（注入 `LD_LIBRARY_PATH`） |
@@ -234,7 +246,7 @@ dsh --profile rapidspeech \
 | §8 Harness 联调策略 | ✅ M0（HTTP 验证）+ M1（Provider + 服务级转写）+ 用户浏览器验收 |
 | §9.1 V2 生命周期 | ✅ Linux x64：状态机映射 SpeechPreparation（unprepared/downloading/checking/loading/ready/standby/failed/cancelled）、spawn(argv) 无 shell、SHA-256 校验、空闲回收、SIGTERM→宽限→终止、外部进程不碰；下载经用户确认 |
 | §9.2 平台发布矩阵 | ◐ Linux x64：CI 构建 + Release 资产 + HF 模型下载就绪；Windows x64 待原生包（CI 矩阵加一个 job 即可） |
-| §10 测试 | ✅ 单测 33 项；生命周期/下载/格式边界/安全/取消均有覆盖 |
+| §10 测试 | ✅ 单测 41 项；模型目录/下载源/生命周期/格式边界/安全/取消均有覆盖 |
 
 ## Windows 适配规划（V2）
 

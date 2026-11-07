@@ -10,8 +10,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SpeechPreparation, SpeechPreparationState } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
-import { assetBasename, resolveManagedTarget, type Config } from './config.js'
+import { assetBasename, resolveManagedTarget, resolveModelAsset, type Config } from './config.js'
 import { downloadFile, extractTarGz } from './download.js'
+import { selectSource } from './models.js'
 
 /** The slice of `ctx.subprocess` this module uses; structural so tests can fake it. */
 export interface SubprocessSpawner {
@@ -67,12 +68,15 @@ function externalLifecycle(config: Config): RapidspeechLifecycle {
 /** Managed lifecycle owning exactly one spawned rs-server. */
 function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
   const target = resolveManagedTarget(config)
+  const model = resolveModelAsset(config)
   let state: SpeechPreparationState = { phase: 'unprepared' }
   const listeners = new Set<() => void>()
   let handle: SubprocessHandle | undefined
   let base: URL | undefined
   let prepareTask: Promise<URL> | undefined
   let prepareController: AbortController | undefined
+  /** Origin chosen in the preparation UI for the running task; undefined keeps the default. */
+  let downloadSource: string | undefined
   let admissionClosed = false
   const active = new Set<Promise<unknown>>()
   let idleTimer: ReturnType<typeof setTimeout> | undefined
@@ -146,10 +150,13 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
       }
     }
     if (!existsSync(target.modelPath)) {
-      if (!target.canDownloadModel) {
-        throw new Error(`RapidSpeech model is missing: ${target.modelPath} (set modelPath, or dataRoot with modelDownloadUrl)`)
+      if (!target.canDownloadModel || model.url === undefined) {
+        throw new Error(`RapidSpeech model is missing: ${target.modelPath} (set modelPath, or dataRoot with modelId/modelDownloadUrl)`)
       }
-      await downloadAsset(config.modelDownloadUrl!, target.modelPath, 'ASR model', signal, config.modelSha256)
+      // The UI's origin choice pins one source; an origin that does not serve this
+      // model fails without fallback. Manual URLs have no advertised sources.
+      const url = model.sources.length > 0 ? selectSource(model.catalog!, downloadSource).url : model.url
+      await downloadAsset(url, target.modelPath, model.displayName, signal, model.sha256)
     }
   }
 
@@ -235,7 +242,7 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
       throw new Error(`RapidSpeech model file is missing: ${target.modelPath}`)
     }
     if (!modelStat.isFile() || modelStat.size === 0) throw new Error(`RapidSpeech model is not a file: ${target.modelPath}`)
-    if (config.modelSha256 === undefined) return
+    if (model.sha256 === undefined) return
     const hash = createHash('sha256')
     const file = await open(target.modelPath, 'r')
     try {
@@ -249,8 +256,8 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
       await file.close()
     }
     const actual = hash.digest('hex')
-    if (actual !== config.modelSha256) {
-      throw new Error(`RapidSpeech model SHA-256 mismatch: expected ${config.modelSha256}, got ${actual}`)
+    if (actual !== model.sha256) {
+      throw new Error(`RapidSpeech model SHA-256 mismatch: expected ${model.sha256}, got ${actual}`)
     }
   }
 
@@ -279,8 +286,9 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    prepare: () => {
+    prepare: (options) => {
       if (admissionClosed || prepareTask !== undefined || base !== undefined) return
+      downloadSource = options?.downloadSource
       prepareController = new AbortController()
       prepareTask = startPrepare(prepareController.signal)
       void prepareTask.catch(() => undefined)

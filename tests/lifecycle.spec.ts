@@ -77,6 +77,7 @@ const managedConfig = (overrides?: Partial<Parameters<typeof createLifecycle>[1]
   endpoint: 'http://127.0.0.1:8080',
   serverBinaryPath: join(workspace, 'rs-server'),
   modelPath: join(workspace, 'model.gguf'),
+  modelId: 'xasr-q8_0',
   extraServerArgs: [] as string[],
   model: 'rapidspeech-asr',
   languages: ['auto', 'zh', 'en'],

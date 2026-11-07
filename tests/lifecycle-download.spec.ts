@@ -94,6 +94,7 @@ const downloadConfig = (overrides?: Partial<Parameters<typeof createLifecycle>[1
   binaryDownloadUrl: `${assetBase}/pkg/rapidspeech-linux-x64.tar.gz`,
   binaryDownloadSha256: undefined,
   modelDownloadUrl: `${assetBase}/models/sense-voice.gguf`,
+  modelId: 'xasr-q8_0',
   serverLibraryPath: undefined,
   modelSha256,
   extraServerArgs: [] as string[],

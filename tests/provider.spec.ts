@@ -42,6 +42,7 @@ const config = (url: URL, overrides?: { languages?: string[]; maxAudioBytes?: nu
   endpoint: url.toString(),
   serverBinaryPath: undefined,
   modelPath: undefined,
+  modelId: 'xasr-q8_0',
   serverLibraryPath: undefined,
   modelSha256: undefined,
   extraServerArgs: [],

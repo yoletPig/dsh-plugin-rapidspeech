@@ -1,7 +1,8 @@
 /** Deployment configuration for the local RapidSpeech.cpp transcription provider. */
-import { isAbsolute, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from './limits.js'
+import { CATALOG_IDS, catalogEntry, type ModelDownloadSource } from './models.js'
 
 /** Hosts that count as loopback for the endpoint guard. */
 const LOOPBACK_HOST_PATTERN = /^(?:localhost(?:\.|$)|127\.\d+\.\d+\.\d+$|::1$|::$|\[::1\]$)/
@@ -26,8 +27,10 @@ export interface Config {
   binaryDownloadUrl?: string | undefined
   /** Expected SHA-256 of the downloaded binary tarball; omission skips archive verification. */
   binaryDownloadSha256?: string | undefined
-  /** GGUF URL used when `modelPath` is absent; the file name becomes the cached model name. */
+  /** GGUF URL used when `modelPath` is absent; takes precedence over `modelId` when set. */
   modelDownloadUrl?: string | undefined
+  /** Built-in catalog model to download when `modelPath`/`modelDownloadUrl` are absent. */
+  modelId: string
   /** Directory holding rs-server's shared libraries; defaults to the binary's directory. */
   serverLibraryPath?: string | undefined
   /** Expected SHA-256 of the model file; verifies both downloads and existing files. */
@@ -70,6 +73,7 @@ export const Config: z<Partial<Config>, Config> = z.object({
   binaryDownloadUrl: z.union([z.string().pattern(/^https:\/\//), z.const(undefined)]),
   binaryDownloadSha256: z.union([z.string().pattern(/^[\da-f]{64}$/), z.const(undefined)]),
   modelDownloadUrl: z.union([z.string().pattern(/^https:\/\//), z.const(undefined)]),
+  modelId: z.string().min(1).default('xasr-q8_0'),
   serverLibraryPath: z.union([z.string().min(1), z.const(undefined)]),
   modelSha256: z.union([z.string().pattern(/^[\da-f]{64}$/), z.const(undefined)]),
   extraServerArgs: z.array(z.string().min(1)).default([]),
@@ -126,6 +130,55 @@ export interface ManagedTarget {
   readonly canDownloadModel: boolean
 }
 
+/** The resolved model asset: where it comes from and how it may be downloaded. */
+export interface ResolvedModel {
+  /** File name used under `dataRoot`'s models directory. */
+  readonly fileName: string
+  /** Human-readable name for preparation progress. */
+  readonly displayName: string
+  /** Complete download URL, when the model is download-capable. */
+  readonly url: string | undefined
+  /** Pinned integrity hash for the download, when known. */
+  readonly sha256: string | undefined
+  /** Origins the preparation UI may offer; empty for explicit paths and manual URLs. */
+  readonly sources: readonly ModelDownloadSource[]
+  /** Catalog entry backing the asset, when the model came from the catalog. */
+  readonly catalog: import('./models.js').ModelCatalogEntry | undefined
+  /** Languages the model supports (catalog models only; undefined falls back to config). */
+  readonly languages: readonly string[] | undefined
+}
+
+/**
+ * Resolve the model asset under the configured precedence: explicit `modelPath`,
+ * then manual `modelDownloadUrl`, then the built-in catalog by `modelId`.
+ * @param config - validated plugin configuration.
+ * @returns the resolved asset.
+ * @throws when `modelId` names no catalog entry.
+ */
+export function resolveModelAsset(config: Config): ResolvedModel {
+  if (config.modelPath !== undefined) {
+    return {
+      fileName: basename(config.modelPath), displayName: 'custom model file', url: undefined,
+      sha256: config.modelSha256, sources: [], catalog: undefined, languages: undefined,
+    }
+  }
+  if (config.modelDownloadUrl !== undefined) {
+    return {
+      fileName: assetBasename(config.modelDownloadUrl), displayName: 'custom model URL',
+      url: config.modelDownloadUrl, sha256: config.modelSha256, sources: [], catalog: undefined,
+      languages: undefined,
+    }
+  }
+  const entry = catalogEntry(config.modelId)
+  if (entry === undefined) {
+    throw new Error(`Unknown RapidSpeech modelId: ${config.modelId}; available: ${CATALOG_IDS.join(', ')}`)
+  }
+  return {
+    fileName: entry.fileName, displayName: entry.displayName, url: entry.sources[0]?.url,
+    sha256: entry.sha256, sources: entry.sources, catalog: entry, languages: entry.languages,
+  }
+}
+
 /** File name of a download URL, query stripped. */
 export function assetBasename(url: string): string {
   const path = new URL(url).pathname
@@ -137,7 +190,7 @@ export function assetBasename(url: string): string {
 /**
  * Resolve where the managed server's binary and model must live: explicit
  * paths win; otherwise both sit inside `dataRoot` and a missing file can be
- * downloaded when the matching URL is configured.
+ * downloaded when the asset resolves to a URL.
  * @param config - validated plugin configuration.
  * @returns the target paths and download capability flags.
  * @throws when managed mode cannot resolve one of the assets at all.
@@ -145,10 +198,10 @@ export function assetBasename(url: string): string {
 export function resolveManagedTarget(config: Config): ManagedTarget {
   const { dataRoot } = config
   const binaryPath = config.serverBinaryPath ?? (dataRoot !== undefined ? join(dataRoot, 'bin', 'rs-server') : undefined)
-  const modelName = config.modelDownloadUrl !== undefined ? assetBasename(config.modelDownloadUrl) : undefined
-  const modelPath = config.modelPath ?? (dataRoot !== undefined && modelName !== undefined ? join(dataRoot, 'models', modelName) : undefined)
+  const model = resolveModelAsset(config)
+  const modelPath = config.modelPath ?? (dataRoot !== undefined && model.url !== undefined ? join(dataRoot, 'models', model.fileName) : undefined)
   if (binaryPath === undefined || modelPath === undefined) {
-    throw new Error('RapidSpeech managed mode requires serverBinaryPath and modelPath, or dataRoot with binaryDownloadUrl/modelDownloadUrl')
+    throw new Error('RapidSpeech managed mode requires serverBinaryPath and modelPath, or dataRoot with a downloadable model')
   }
   for (const [name, path] of [['serverBinaryPath', binaryPath], ['modelPath', modelPath]] as const) {
     if (!isAbsolute(path)) throw new Error(`RapidSpeech ${name} must be an absolute path: ${path}`)
@@ -157,7 +210,7 @@ export function resolveManagedTarget(config: Config): ManagedTarget {
     binaryPath,
     modelPath,
     canDownloadBinary: config.serverBinaryPath === undefined && dataRoot !== undefined && config.binaryDownloadUrl !== undefined,
-    canDownloadModel: config.modelPath === undefined && dataRoot !== undefined && config.modelDownloadUrl !== undefined,
+    canDownloadModel: config.modelPath === undefined && dataRoot !== undefined && model.url !== undefined,
   }
 }
 

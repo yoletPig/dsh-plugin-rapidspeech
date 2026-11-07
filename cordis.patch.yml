@@ -7,10 +7,12 @@
 #
 # Default deployment is managed mode with auto-download: on first use the plugin
 # fetches the platform rs-server from this repository's GitHub Releases and the
-# SenseVoice GGUF from RapidAI's Hugging Face repo into the dsh home cache
-# (`dshHomePath('rapidspeech')`), verifies the model SHA-256, then spawns the
-# server on an OS-assigned loopback port. Both pieces can be swapped for
-# user-provided files via serverBinaryPath / modelPath.
+# configured catalog model (xasr-q8_0 by default, served from ModelScope) into
+# the dsh home cache (`dshHomePath('rapidspeech')`), verifies the pinned model
+# SHA-256, then spawns the server on an OS-assigned loopback port. The
+# preparation UI offers every mirror the catalog knows for the chosen model;
+# both assets can be swapped for user-provided files via serverBinaryPath /
+# modelPath, or another model via modelId.
 #
 # If the official voice-input-bundle is also enabled, later layers win per row:
 # whichever bundle is installed later overrides the speech-to-text row's
@@ -26,8 +28,7 @@
         managementMode: managed
         dataRoot: !!js dshHomePath('rapidspeech')
         binaryDownloadUrl: 'https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/rapidspeech-linux-x64.tar.gz'
-        modelDownloadUrl: 'https://huggingface.co/RapidAI/RapidSpeech/resolve/main/ASR/SenseVoice/sense-voice-small-q4_k.gguf'
-        modelSha256: '0a2457c53b6c3f3e504df16585dcd0ede9ef5ae023325c70ed547801a9453c0a'
+        modelId: 'xasr-q8_0'
     - id: api-speech-to-text
       name: '@deepseek-ai/dsh-experimental-api-speech-to-text'
     - id: ui-voice-input
