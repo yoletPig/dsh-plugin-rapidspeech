@@ -1,5 +1,4 @@
 *.tgz
-docs/images/demo.gif
 internal/
 lib/
 node_modules/

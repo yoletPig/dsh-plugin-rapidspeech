@@ -3,6 +3,85 @@
 All notable changes to dsh-plugin-rapidspeech are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions are the git tags.
 
+## v0.4.0
+
+The ASR model becomes switchable from the web UI: the plugin page gains a model picker,
+and changing the model no longer touches the patch YAML or restarts the profile — the
+provider hot-swaps in place.
+
+### Added
+
+- Browser half (`./client`) registering the row's config page into the plugin manager
+  (`plugins.row.config`, key `dsh-plugin-rapidspeech#rapidspeech-asr`): catalog model
+  cards (languages, size, SHA-256 prefix) plus a custom GGUF absolute-path field; writes
+  go through the settings service into the profile patch. Bundled by esbuild into the
+  dsh ModuleLoader factory format (`scripts/build-client.mjs`).
+- Volatile model-selection config (`modelId`, `modelPath`, `modelDownloadUrl`,
+  `modelSha256`): the Loader commits edits into the running row without unmounting it,
+  and `apply` rebuilds the provider and managed server over a serialized restart chain
+  (previous teardown completes before the replacement registers; unload racing a queued
+  swap is safe). Cached models swap within seconds; uncached catalog models fall into
+  the existing preparation/consent flow.
+- `dataRoot` now defaults to the dsh home cache (`dshHomePath('rapidspeech')`), so
+  deployments whose patch layer replaces the row's whole config stay catalog-switchable.
+- Model cache keyed per file name, so several catalog models coexist in one cache and
+  switching back to a prepared model is instant.
+
+### Verified
+
+- 50 tests, including hot-swap ordering (unregister before re-register, unrelated
+  volatile updates ignored, unload against a queued swap) and volatile cell snapshotting.
+- Live profile: the web module graph serves the browser half, and the managed provider
+  auto-prepares with the rebuilt code.
+
+## v0.3.2
+
+Portable Windows packaging and clearer startup failures.
+
+### Added
+
+- Startup-failure diagnostics surface the managed server's child exit code (including
+  `0xC…` access-violation / illegal-instruction codes on Windows) next to the stderr tail.
+- Windows binaries build with `GGML_NATIVE=OFF`, trading host-native tuning for a
+  portable AVX2 baseline that runs on any x64 CPU.
+
+### Fixed
+
+- npm publish guard runs inside the shell so the workflow's exit code is checked.
+
+## v0.3.1
+
+First npm-published release; 0.3.0 had to be published manually after npm E403 rejected
+the tag-triggered publish.
+
+### Fixed
+
+- The publish workflow reads `NPM_TOKEN` from the secrets context and drops the
+  nonexistent `npm pack --pack-filename` flag.
+
+## v0.3.0
+
+Windows support, v2 cache-update detection, and the npm/release pipeline.
+
+### Added
+
+- Windows: CI win32-x64 job builds `rs-server.exe` with MSVC static CRT (no vcruntime
+  dependency) into `rapidspeech-win32-x64.tar.gz`; platform-aware default binary URL and
+  executable naming; no `LD_LIBRARY_PATH` handling on win32.
+- Cache-update detection: downloads record the asset ETag, and preparation HEADs the URL
+  to treat a changed tag as a stale cache — upgrades route through the preparation UI's
+  consent step instead of silent re-downloads. `filesReady()` is async (one HEAD probe at
+  activation); model staleness keeps keying on the pinned SHA-256.
+- npm publishing metadata, market index, and a publish workflow; the installable plugin
+  tarball is attached to releases, with curated release notes from this file.
+- MIT license and third-party license notices.
+
+### Fixed
+
+- Linux idle reclamation also fires right after prepare, so a prepared but never-used
+  server is still reclaimed.
+- Download writer error listeners are removed after each backpressure wait.
+
 ## v0.2.0
 
 First tagged release of the managed deployment stack.
