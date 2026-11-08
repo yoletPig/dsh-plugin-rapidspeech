@@ -103,18 +103,19 @@ jobs:
         run: |
           # MSVC is a multi-config generator: the exe lands in build\Release\.
           $upCommit = git -C upstream rev-parse --short HEAD
-          @"
-rs-server built from RapidAI/RapidSpeech.cpp @ $upCommit
-https://github.com/RapidAI/RapidSpeech.cpp
-
-Upstream metadata declares the Apache license (setup.py) but the repository
-shipped no license text at build time; see the upstream repository for the
-authoritative terms. ggml (statically linked) is MIT; its text ships as
-ggml-LICENSE.
-
-ASR models are NOT redistributed here; they download from the official
-RapidAI repositories at first use with user consent.
-"@ | Set-Content NOTICE.txt
+          $lines = @(
+            "rs-server built from RapidAI/RapidSpeech.cpp @ $upCommit"
+            "https://github.com/RapidAI/RapidSpeech.cpp"
+            ""
+            "Upstream metadata declares the Apache license (setup.py) but the repository"
+            "shipped no license text at build time; see the upstream repository for the"
+            "authoritative terms. ggml (statically linked) is MIT; its text ships as"
+            "ggml-LICENSE."
+            ""
+            "ASR models are NOT redistributed here; they download from the official"
+            "RapidAI repositories at first use with user consent."
+          )
+          $lines | Set-Content NOTICE.txt
           New-Item -ItemType Directory -Force -Path pkg | Out-Null
           Copy-Item upstream\build\Release\rs-server.exe pkg\
           Copy-Item NOTICE.txt pkg\
