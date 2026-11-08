@@ -15,7 +15,7 @@ jobs:
   linux-x64:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Checkout RapidSpeech.cpp (with ggml and cppjieba submodules)
         run: git clone --depth 1 --recursive --shallow-submodules https://github.com/RapidAI/RapidSpeech.cpp.git upstream
@@ -39,13 +39,13 @@ jobs:
           test -x /tmp/pkgcheck/bin/rs-server
           /tmp/pkgcheck/bin/rs-server --help > /dev/null
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rapidspeech-linux-x64
           path: rapidspeech-linux-x64.tar.gz
 
       - name: Attach to the GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: rapidspeech-linux-x64.tar.gz
