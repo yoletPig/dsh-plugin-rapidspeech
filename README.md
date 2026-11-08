@@ -21,7 +21,9 @@ Local, offline speech-to-text for the [DeepSeek Harness](https://github.com/deep
 ## Requirements
 
 - DeepSeek Harness **0.2.2 or newer** (npm CLI or Desktop app)
-- CPU with **AVX2** — Intel Haswell (2013) / AMD Excavator (2015) or newer
+- CPU with **AVX2** — Intel Haswell (2013) / AMD Excavator (2015) or newer. Both the
+  Linux and Windows builds target AVX2 as their baseline, so the requirement is
+  identical on either OS.
 - Disk: ~200 MB–1 GB per model; RAM: ~1–2 GB while transcribing
 - Windows x64 and Linux x64
 
@@ -29,13 +31,18 @@ Local, offline speech-to-text for the [DeepSeek Harness](https://github.com/deep
 
 ### From the plugin marketplace (Desktop / Web UI)
 
-1. Open the plugin market, go to its index settings, and add this index source:
+Two ways — both put **RapidSpeech ASR (local)** in your plugin list:
 
-   ```
-   https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/market-index.json
-   ```
+- **Search and install** (simplest): open the market's install page, search for
+  `dsh-plugin-rapidspeech`, and install it. The package lives on the official npm
+  registry; if your npm mirror lags behind, give it a few minutes or point the
+  registry back at `registry.npmjs.org`.
+- **Index source** (curated card with a description): add this index URL in the
+  market's index settings, then find **RapidSpeech ASR (local)** and install:
 
-2. Find **RapidSpeech ASR (local)** in the market and click **Install**.
+  ```
+  https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/market-index.json
+  ```
 
 ### From the CLI
 

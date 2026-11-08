@@ -21,7 +21,7 @@
 ## 环境要求
 
 - DeepSeek Harness **0.2.2 或更新**（npm CLI 或桌面版）
-- 支持 **AVX2** 的 CPU —— Intel Haswell（2013）/ AMD Excavator（2015）或更新
+- 支持 **AVX2** 的 CPU —— Intel Haswell（2013）/ AMD Excavator（2015）或更新。Linux 与 Windows 两个平台的构建都以 AVX2 为基线，要求相同。
 - 磁盘：每个模型约 200 MB–1 GB；转写时内存约 1–2 GB
 - Windows x64 与 Linux x64
 
@@ -29,13 +29,14 @@
 
 ### 从插件市场（桌面版 / Web UI）
 
-1. 打开插件市场，进入索引设置，添加以下索引源：
+两种方式，效果都是把 **RapidSpeech ASR (local)** 装进插件列表：
 
-   ```
-   https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/market-index.json
-   ```
+- **直接搜索安装**（最简单）：打开市场的安装页，搜索 `dsh-plugin-rapidspeech` 并安装。包发布在 npm 官方源；如果你的镜像源还没同步，等几分钟或把 registry 切回 `registry.npmjs.org`。
+- **索引源**（带描述的精选卡片）：在市场的索引设置中添加以下地址，然后找到 **RapidSpeech ASR (local)** 安装：
 
-2. 在市场中找到 **RapidSpeech ASR (local)**，点击 **安装**。
+  ```
+  https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/market-index.json
+  ```
 
 ### 从 CLI 安装
 
