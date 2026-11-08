@@ -25,7 +25,7 @@ dsh --profile rapidspeech
 
 首次点击麦克风旁的"安装"时，插件会（经用户确认后）下载两样东西到 `~/.dsh/rapidspeech/` 缓存：
 
-1. **rs-server 二进制**：来自本仓库 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases)（CI 自动构建的 `rapidspeech-linux-x64.tar.gz`，二进制 + .so 平铺在压缩包根目录）
+1. **rs-server 二进制**：来自本仓库 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases)（CI 用 `RS_STATIC_EXE=ON` 构建的**自包含静态二进制**，约 5 MB，仅依赖系统 glibc/libstdc++/libgomp，在 ubuntu-22.04 上构建、glibc ≥ 2.35 可用）
 2. **模型 GGUF**：默认 `xasr-q8_0`（178 MB，ModelScope）；准备 UI 会列出该模型的所有官方镜像供选择，SHA-256 固定校验
 
 ### 模型选择
@@ -70,7 +70,7 @@ Bundle 的 `cordis.patch.yml` 会插入完整语音输入组合：`speech-to-tex
 
 ## 构建自己的原生二进制
 
-仓库带 CI（`.github/workflows/build-native.yml`）：推送 `v*` tag 或手动触发，即从上游 RapidSpeech.cpp 构建 rs-server、连同 .so 打包为 `rapidspeech-linux-x64.tar.gz` 并上传 Release。`binaryDownloadUrl` 指向 `releases/latest/download/...`，发新版只需打 tag。
+仓库带 CI（`.github/workflows/build-native.yml`）：推送 `v*` tag 或手动触发，即从上游 RapidSpeech.cpp（含 ggml/cppjieba 子模块）以静态模式构建自包含的 rs-server，打包为 `rapidspeech-linux-x64.tar.gz` 并上传 Release。`binaryDownloadUrl` 指向 `releases/latest/download/...`，发新版只需打 tag。`serverLibraryPath` 仅在用户自备动态链接 rs-server 时需要（静态二进制无外部 .so）。
 
 ## 配置（cordis.patch.yml / profile 层可覆盖）
 
