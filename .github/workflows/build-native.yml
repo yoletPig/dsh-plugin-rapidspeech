@@ -29,9 +29,27 @@ jobs:
       - name: Package the self-contained binary (flat archive root)
         run: |
           # RS_STATIC_EXE links ggml and rapidspeech-core statically; the binary
-          # only needs system libraries (glibc/libstdc++/libgomp). The upstream
-          # Apache-2.0 license ships alongside for redistribution compliance.
-          tar -czf rapidspeech-linux-x64.tar.gz -C upstream/build rs-server -C .. LICENSE
+          # only needs system libraries (glibc/libstdc++/libgomp).
+          UP_COMMIT=$(git -C upstream rev-parse --short HEAD)
+          {
+            echo "rs-server built from RapidAI/RapidSpeech.cpp @ ${UP_COMMIT}"
+            echo "https://github.com/RapidAI/RapidSpeech.cpp"
+            echo
+            echo "Upstream metadata declares the Apache license (setup.py) but the"
+            echo "repository shipped no license text at build time; see the upstream"
+            echo "repository for the authoritative terms. ggml (statically linked)"
+            echo "is MIT; its text ships as ggml-LICENSE."
+            echo
+            echo "ASR models are NOT redistributed here; they download from the"
+            echo "official RapidAI repositories at first use with user consent."
+          } > NOTICE.txt
+          mkdir -p pkg
+          cp upstream/build/rs-server pkg/
+          cp NOTICE.txt pkg/
+          cp upstream/ggml/LICENSE pkg/ggml-LICENSE
+          # Ship the upstream license too once the repository adds one.
+          if [ -f upstream/LICENSE ]; then cp upstream/LICENSE pkg/rapidspeech-LICENSE; fi
+          tar -czf rapidspeech-linux-x64.tar.gz -C pkg .
           sha256sum rapidspeech-linux-x64.tar.gz
 
       - name: Smoke test the packaged binary
@@ -84,10 +102,25 @@ jobs:
         shell: pwsh
         run: |
           # MSVC is a multi-config generator: the exe lands in build\Release\.
+          $upCommit = git -C upstream rev-parse --short HEAD
+          @"
+rs-server built from RapidAI/RapidSpeech.cpp @ $upCommit
+https://github.com/RapidAI/RapidSpeech.cpp
+
+Upstream metadata declares the Apache license (setup.py) but the repository
+shipped no license text at build time; see the upstream repository for the
+authoritative terms. ggml (statically linked) is MIT; its text ships as
+ggml-LICENSE.
+
+ASR models are NOT redistributed here; they download from the official
+RapidAI repositories at first use with user consent.
+"@ | Set-Content NOTICE.txt
           New-Item -ItemType Directory -Force -Path pkg | Out-Null
           Copy-Item upstream\build\Release\rs-server.exe pkg\
-          Copy-Item upstream\LICENSE pkg\
-          tar -czf rapidspeech-win32-x64.tar.gz -C pkg rs-server.exe LICENSE
+          Copy-Item NOTICE.txt pkg\
+          Copy-Item upstream\ggml\LICENSE pkg\ggml-LICENSE
+          if (Test-Path upstream\LICENSE) { Copy-Item upstream\LICENSE pkg\rapidspeech-LICENSE }
+          tar -czf rapidspeech-win32-x64.tar.gz -C pkg .
           Get-FileHash rapidspeech-win32-x64.tar.gz
 
       - name: Smoke test the packaged binary

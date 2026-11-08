@@ -253,7 +253,7 @@ dsh --profile rapidspeech \
 ## Windows 适配状态（V3）
 
 - ✅ 插件代码平台无关：URL 按平台拼装、`rs-server.exe` 文件名、Windows 下跳过 `LD_LIBRARY_PATH`
-- ✅ CI `win32-x64` job：windows-latest + MSVC 静态 CRT（`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`）构建 `rs-server.exe`，打包 `rapidspeech-win32-x64.tar.gz` 上传 Release
+- ✅ CI `win32-x64` job：windows-latest + MSVC 静态 CRT（`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`）构建 `rs-server.exe`，打包 `rapidspeech-win32-x64.tar.gz` 上传 Release（注意：上游 MSVC 构建首次由 CI 验证，若失败看 Actions 日志）
 - ✅ 进程终止经 dsh 的 subprocess 服务（win32-process，Job 对象管理子进程树）
 - ⏳ **待真机验收**：本环境是 WSL，rs-server.exe 的实际运行、下载流程与麦克风链路需要在一台 Windows 上跑一遍（`dsh --profile rapidspeech` 即可复用同一套流程）
 - 需注意：杀毒软件可能拦截未签名 exe（设计文档 §9.2）；如遇拦截，把 `~/.dsh/rapidspeech/bin` 加入白名单
@@ -266,8 +266,8 @@ dsh --profile rapidspeech \
 
 | 组件 | 许可 | 获取方式 |
 | --- | --- | --- |
-| [RapidSpeech.cpp](https://github.com/RapidAI/RapidSpeech.cpp)（rs-server 二进制由 CI 从其源码构建） | Apache-2.0 | GitHub Releases 分发的 tarball 内附其 LICENSE 文本 |
-| [ggml](https://github.com/ggml-org/ggml)（RapidSpeech.cpp 子模块，静态链接进二进制） | MIT | 同上，经 RapidSpeech.cpp 合规再分发 |
+| [RapidSpeech.cpp](https://github.com/RapidAI/RapidSpeech.cpp)（rs-server 二进制由 CI 从其源码构建） | 上游 setup.py 声明 Apache，但**仓库未随附许可文本**（GitHub license: null） | tarball 内附 NOTICE（来源 commit 与许可声明现状）；上游补 LICENSE 后 CI 会自动附带 |
+| [ggml](https://github.com/ggml-org/ggml)（RapidSpeech.cpp 子模块，静态链接进二进制） | MIT | tarball 内附其原文（`ggml-LICENSE`） |
 | ASR 模型（X-ASR / SenseVoice / FunASR-Nano） | Apache-2.0（[RapidAI/RapidSpeech 模型仓库声明](https://huggingface.co/RapidAI/RapidSpeech)） | 运行时按用户确认从 ModelScope / HuggingFace 官方源下载，不在本仓库或 Release 中再分发 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（宿主运行时） | MIT | 用户经 npm 自行安装 |
 
