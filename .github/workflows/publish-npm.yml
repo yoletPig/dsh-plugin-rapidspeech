@@ -1,0 +1,48 @@
+# Publishes the plugin to npm and attaches the regenerated market index to the Release.
+# Requires the NPM_TOKEN repository secret (an npm automation token).
+name: publish-npm
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  npm:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build and test
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/') && env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish
+
+      - name: Regenerate the market index
+        run: node scripts/gen-market-index.mjs
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: market-index
+          path: market-index.json
+
+      - name: Attach the market index to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: market-index.json

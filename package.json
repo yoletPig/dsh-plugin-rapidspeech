@@ -31,7 +31,7 @@
   },
   "engines": {
     "node": ">=24.9.0",
-    "dsh": ">=0.2.2-rc.1 <0.3.0"
+    "dsh": ">=0.2.2-rc.1 <0.4.0"
   },
   "dsh": {
     "bundle": {
@@ -55,6 +55,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://example.com/dsh-plugin-rapidspeech.git"
+    "url": "git+https://github.com/yoletPig/dsh-plugin-rapidspeech.git"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "asr",
+    "voice-input",
+    "rapidspeech",
+    "local",
+    "speech-to-text"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
