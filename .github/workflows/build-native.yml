@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout RapidSpeech.cpp
-        run: git clone --depth 1 https://github.com/RapidAI/RapidSpeech.cpp.git upstream
+      - name: Checkout RapidSpeech.cpp (with ggml and cppjieba submodules)
+        run: git clone --depth 1 --recursive --shallow-submodules https://github.com/RapidAI/RapidSpeech.cpp.git upstream
 
       - name: Configure and build rs-server
         run: |
