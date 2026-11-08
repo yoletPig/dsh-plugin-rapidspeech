@@ -1,3 +1,5 @@
-node_modules/
-lib/
 *.tgz
+docs/images/demo.gif
+internal/
+lib/
+node_modules/
