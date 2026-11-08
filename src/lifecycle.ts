@@ -19,7 +19,8 @@ interface CacheMeta {
   readonly binaryUrl?: string
   /** ETag/Last-Modified captured at download time; detects new releases at the same URL. */
   readonly binaryTag?: string
-  readonly modelSha?: string
+  /** SHA-256 per cached model file name, so several model instances share one cache. */
+  readonly modelShas?: Record<string, string>
   readonly updatedAt?: string
 }
 
@@ -108,9 +109,12 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
   const writeMeta = async (): Promise<void> => {
     if (metaPath === undefined) return
     await mkdir(dirname(metaPath), { recursive: true })
+    const previous = readMeta()
+    const modelShas = { ...previous?.modelShas }
+    if (model.sha256 !== undefined) modelShas[model.fileName] = model.sha256
     const meta: CacheMeta = {
       ...(target.binaryUrl !== undefined ? { binaryUrl: target.binaryUrl, ...(binaryTag !== undefined ? { binaryTag } : {}) } : {}),
-      ...(model.sha256 !== undefined ? { modelSha: model.sha256 } : {}),
+      ...(Object.keys(modelShas).length > 0 ? { modelShas } : {}),
       updatedAt: new Date().toISOString(),
     }
     await writeFile(metaPath, JSON.stringify(meta, null, 1))
@@ -133,8 +137,10 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
         if (current !== undefined && current !== meta.binaryTag) return true
       }
     }
-    if (config.modelPath === undefined && model.sha256 !== undefined
-      && meta.modelSha !== undefined && meta.modelSha !== model.sha256) return true
+    if (config.modelPath === undefined && model.sha256 !== undefined) {
+      const cachedSha = meta.modelShas?.[model.fileName]
+      if (cachedSha !== undefined && cachedSha !== model.sha256) return true
+    }
     return false
   }
 
@@ -215,7 +221,9 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
       updated = true
     }
     const modelStale = !existsSync(target.modelPath)
-      || (config.modelPath === undefined && model.sha256 !== undefined && readMeta()?.modelSha !== undefined && readMeta()?.modelSha !== model.sha256)
+      || (config.modelPath === undefined && model.sha256 !== undefined
+        && readMeta()?.modelShas?.[model.fileName] !== undefined
+        && readMeta()?.modelShas?.[model.fileName] !== model.sha256)
     if (modelStale) {
       if (!target.canDownloadModel || model.url === undefined) {
         throw new Error(`RapidSpeech model is missing: ${target.modelPath} (set modelPath, or dataRoot with modelId/modelDownloadUrl)`)
