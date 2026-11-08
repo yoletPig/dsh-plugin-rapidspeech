@@ -16,12 +16,40 @@ Browser microphone / Voice Input UI
 
 ## 安装
 
-### 一键安装（推荐：managed 模式，自动下载）
+> Web UI 的插件市场只索引 npm 源；本插件未发布 npm 时，用以下任一 **CLI** 方式安装（Windows 在 PowerShell 中执行，命令相同）。
 
-```bash
-dsh plugin --profile rapidspeech add github:yoletPig/dsh-plugin-rapidspeech
+### 方式一：Release tarball（推荐，零构建）
+
+从 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases) 下载 `dsh-plugin-rapidspeech-<版本>.tgz`（CI 每次 tag 自动构建并附带），然后：
+
+```powershell
+dsh plugin --profile rapidspeech add .\dsh-plugin-rapidspeech-<版本>.tgz
 dsh --profile rapidspeech
 ```
+
+### 方式二：git 直装
+
+```powershell
+dsh plugin --profile rapidspeech add github:yoletPig/dsh-plugin-rapidspeech
+```
+
+git 安装拉取源码，pnpm 会执行 `prepare` 脚本现场构建；pnpm ≥ 10 首次会拒绝并提示——按提示把包名加进 profile 的 `pnpm-workspace.yaml` 再重试：
+
+```yaml
+allowBuilds:
+  dsh-plugin-rapidspeech: true
+```
+
+### 方式三：本地 checkout（开发）
+
+```powershell
+git clone https://github.com/yoletPig/dsh-plugin-rapidspeech.git
+cd dsh-plugin-rapidspeech
+npm install        # 触发 prepare 自动构建 lib/
+dsh plugin --profile rapidspeech add .\dsh-plugin-rapidspeech
+```
+
+### 安装后的体验（managed 模式，自动下载）
 
 首次点击麦克风旁的"安装"时，插件会（经用户确认后）下载两样东西到 `~/.dsh/rapidspeech/` 缓存：
 
@@ -41,14 +69,6 @@ dsh --profile rapidspeech
 切换：profile 覆盖里设 `modelId`；或 `modelDownloadUrl` 指向任意直链；或 `modelPath` 直接用本地文件（三者按此优先级生效）。X-ASR 官方仅发布在 ModelScope，故 HF 源对它不可选（UI 只列可用源，选错会被显式拒绝、不回退）。
 
 之后完全离线运行；空闲 5 分钟自动回收进程，下次使用自动唤醒（约 2 秒）。
-
-### 从本地 checkout 安装（开发）
-
-```bash
-npm install && npm run build && npm test   # 33 个单测
-dsh plugin --profile rapidspeech add /path/to/dsh-plugin-rapidspeech
-dsh --profile rapidspeech                  # Web UI（默认 http://127.0.0.1:3080）
-```
 
 ### 使用自备的 rs-server / 模型（external 模式）
 
