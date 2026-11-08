@@ -23,7 +23,10 @@ jobs:
       - name: Configure and build rs-server
         run: |
           cd upstream
-          cmake -B build -DRS_STATIC_EXE=ON -DCMAKE_BUILD_TYPE=Release
+          # GGML_NATIVE=OFF skips the build-machine SIMD probe (FindSIMD on MSVC,
+          # -march=native on GCC): runners carry AVX-512 that most consumer CPUs
+          # lack, which crashed the exe at first compute. AVX2 covers Haswell+.
+          cmake -B build -DRS_STATIC_EXE=ON -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF
           cmake --build build --target rs-server -j"$(nproc)"
 
       - name: Package the self-contained binary (flat archive root)
@@ -129,7 +132,7 @@ jobs:
       - name: Configure and build rs-server.exe
         run: |
           cd upstream
-          cmake -B build -DRS_STATIC_EXE=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake -B build -DRS_STATIC_EXE=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DGGML_NATIVE=OFF
           cmake --build build --target rs-server --config Release -j $env:NUMBER_OF_PROCESSORS
 
       - name: Package the self-contained binary (flat archive root)

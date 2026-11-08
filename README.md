@@ -53,7 +53,7 @@ dsh plugin --profile rapidspeech add .\dsh-plugin-rapidspeech
 
 首次点击麦克风旁的"安装"时，插件会（经用户确认后）下载两样东西到 `~/.dsh/rapidspeech/` 缓存：
 
-1. **rs-server 二进制**：来自本仓库 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases)，按 `process.platform/arch` 自动选择资产（`rapidspeech-linux-x64.tar.gz` / `rapidspeech-win32-x64.tar.gz`）。CI 用 `RS_STATIC_EXE=ON` 构建**自包含静态二进制**：Linux 约 5 MB（仅依赖 glibc/libstdc++/libgomp，glibc ≥ 2.35），Windows 为 `rs-server.exe`（MSVC /MT 静态 CRT，无 vcruntime 依赖）
+1. **rs-server 二进制**：来自本仓库 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases)，按 `process.platform/arch` 自动选择资产（`rapidspeech-linux-x64.tar.gz` / `rapidspeech-win32-x64.tar.gz`）。CI 用 `RS_STATIC_EXE=ON` 构建**自包含静态二进制**：Linux 约 5 MB（仅依赖 glibc/libstdc++/libgomp，glibc ≥ 2.35），Windows 为 `rs-server.exe`（MSVC /MT 静态 CRT，无 vcruntime 依赖）。两平台均以 **AVX2 基线**构建（`GGML_NATIVE=OFF`）：要求 Intel Haswell（2013）/ AMD Excavator（2015）或更新的 CPU——构建机上更新的指令集（AVX-512 等）被显式关闭，避免在消费级 CPU 上非法指令崩溃
 2. **模型 GGUF**：默认 `xasr-q8_0`（178 MB，ModelScope）；准备 UI 会列出该模型的所有官方镜像供选择，SHA-256 固定校验
 
 ### 模型选择
