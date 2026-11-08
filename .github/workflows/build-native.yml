@@ -101,9 +101,9 @@ jobs:
 
       - name: Pack the installable tarball
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          npm pack --pack-filename "dsh-plugin-rapidspeech-${VERSION}.tgz"
-          sha256sum "dsh-plugin-rapidspeech-${VERSION}.tgz"
+          # npm names the tarball after package.json's name+version.
+          npm pack
+          sha256sum dsh-plugin-rapidspeech-*.tgz
 
       - uses: actions/upload-artifact@v7
         with:
