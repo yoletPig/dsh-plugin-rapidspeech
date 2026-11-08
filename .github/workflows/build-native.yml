@@ -29,8 +29,9 @@ jobs:
       - name: Package the self-contained binary (flat archive root)
         run: |
           # RS_STATIC_EXE links ggml and rapidspeech-core statically; the binary
-          # only needs system libraries (glibc/libstdc++/libgomp).
-          tar -czf rapidspeech-linux-x64.tar.gz -C upstream/build rs-server
+          # only needs system libraries (glibc/libstdc++/libgomp). The upstream
+          # Apache-2.0 license ships alongside for redistribution compliance.
+          tar -czf rapidspeech-linux-x64.tar.gz -C upstream/build rs-server -C .. LICENSE
           sha256sum rapidspeech-linux-x64.tar.gz
 
       - name: Smoke test the packaged binary

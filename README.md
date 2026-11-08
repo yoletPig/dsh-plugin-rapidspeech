@@ -256,4 +256,15 @@ dsh --profile rapidspeech \
 
 ## 许可
 
-MIT
+本插件以 [MIT](LICENSE) 发布。
+
+### 第三方组件与许可
+
+| 组件 | 许可 | 获取方式 |
+| --- | --- | --- |
+| [RapidSpeech.cpp](https://github.com/RapidAI/RapidSpeech.cpp)（rs-server 二进制由 CI 从其源码构建） | Apache-2.0 | GitHub Releases 分发的 tarball 内附其 LICENSE 文本 |
+| [ggml](https://github.com/ggml-org/ggml)（RapidSpeech.cpp 子模块，静态链接进二进制） | MIT | 同上，经 RapidSpeech.cpp 合规再分发 |
+| ASR 模型（X-ASR / SenseVoice / FunASR-Nano） | Apache-2.0（[RapidAI/RapidSpeech 模型仓库声明](https://huggingface.co/RapidAI/RapidSpeech)） | 运行时按用户确认从 ModelScope / HuggingFace 官方源下载，不在本仓库或 Release 中再分发 |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（宿主运行时） | MIT | 用户经 npm 自行安装 |
+
+本仓库源码不包含任何第三方二进制或模型权重；插件运行时下载的资产均来自上述官方发布渠道并做 SHA-256 完整性校验。各组件的许可以其上游声明为准。
