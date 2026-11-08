@@ -28,10 +28,16 @@ jobs:
           npm test
 
       - name: Publish to npm
-        if: startsWith(github.ref, 'refs/tags/') && secrets.NPM_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish
+        run: |
+          # The secrets context is unavailable in `if`, so the token check lives here.
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret is not set; skipping npm publish."
+          else
+            npm publish
+          fi
 
       - name: Regenerate the market index
         run: node scripts/gen-market-index.mjs
