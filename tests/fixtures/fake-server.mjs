@@ -8,6 +8,8 @@ const option = (name, fallback) => {
 }
 const port = Number(option('port', '0'))
 const bindDelayMs = Number(option('delay', '0'))
+/** Transcript text override, so test binaries can prove which one served. */
+const text = option('text', 'fake transcript')
 /** Exit this many milliseconds after the first health hit; 0 disables. */
 const dieInMs = Number(option('die-in', '0'))
 let dying = false
@@ -32,7 +34,7 @@ const server = createServer((request, response) => {
         return
       }
       response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({ text: 'fake transcript' }))
+      response.end(JSON.stringify({ text }))
     })
     return
   }

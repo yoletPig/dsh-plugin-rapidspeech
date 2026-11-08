@@ -32,14 +32,22 @@ export interface DownloadOptions {
   readonly onProgress?: (progress: DownloadProgress) => void
 }
 
+/** One completed download: bytes landed plus a server-provided change tag. */
+export interface DownloadOutcome {
+  readonly bytes: number
+  /** `ETag` or `Last-Modified` of the asset, for update detection; undefined when the server sends neither. */
+  readonly tag: string | undefined
+}
+
 /**
  * Download one asset to `destination`.
  * @param url - asset origin.
  * @param destination - final file path; written atomically via a sibling temp file.
  * @param options - deadline, integrity, and progress.
+ * @returns the landed size and the asset's change tag.
  * @throws DownloadError with a stable reason on any failure path.
  */
-export async function downloadFile(url: string, destination: string, options: DownloadOptions): Promise<void> {
+export async function downloadFile(url: string, destination: string, options: DownloadOptions): Promise<DownloadOutcome> {
   const { signal, timeoutMs, sha256, onProgress } = options
   const deadline = Date.now() + timeoutMs
   signal.throwIfAborted()
@@ -58,6 +66,7 @@ export async function downloadFile(url: string, destination: string, options: Do
     }
     const declared = response.headers.get('content-length')
     const total = declared !== null && /^\d+$/.test(declared) ? Number(declared) : undefined
+    const tag = response.headers.get('etag') ?? response.headers.get('last-modified') ?? undefined
     if (total !== undefined && total > MAX_DOWNLOAD_BYTES) {
       throw new DownloadError(`Download exceeds the ${MAX_DOWNLOAD_BYTES} byte cap`, 'integrity')
     }
@@ -102,7 +111,8 @@ export async function downloadFile(url: string, destination: string, options: Do
       throw new DownloadError(`Downloaded asset SHA-256 mismatch: expected ${sha256}, got ${actual}`, 'integrity')
     }
     await rename(temp, destination)
-    onProgress?.({ completedBytes: completed, totalBytes: total ?? completed })
+    onProgress?.({ completedBytes: completed, ...(total !== undefined ? { totalBytes: total } : {}) })
+    return { bytes: completed, tag }
   } catch (error) {
     await rm(temp, { force: true }).catch(() => undefined)
     throw error

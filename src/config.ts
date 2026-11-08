@@ -124,6 +124,8 @@ export interface ManagedTarget {
   readonly binaryPath: string
   /** Resolved absolute model path (explicit or under `dataRoot`). */
   readonly modelPath: string
+  /** Binary download URL: the explicit config value, or the platform release asset. */
+  readonly binaryUrl: string | undefined
   /** The binary is meant to live in the `dataRoot` cache, so a missing file can be downloaded. */
   readonly canDownloadBinary: boolean
   /** The model is meant to live in the `dataRoot` cache, so a missing file can be downloaded. */
@@ -179,6 +181,24 @@ export function resolveModelAsset(config: Config): ResolvedModel {
   }
 }
 
+/** Releases origin the built-in binary download falls back to. */
+export const PLUGIN_RELEASE_ORIGIN = 'https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download'
+
+/** CI asset name for this platform; the Windows build ships rs-server.exe. */
+export function platformBinaryAsset(): string {
+  return `rapidspeech-${process.platform}-${process.arch}.tar.gz`
+}
+
+/** Complete platform asset URL used when `binaryDownloadUrl` is not configured. */
+export function platformBinaryUrl(): string {
+  return `${PLUGIN_RELEASE_ORIGIN}/${platformBinaryAsset()}`
+}
+
+/** File name of the server executable on this platform. */
+export function serverBinaryName(): string {
+  return process.platform === 'win32' ? 'rs-server.exe' : 'rs-server'
+}
+
 /** File name of a download URL, query stripped. */
 export function assetBasename(url: string): string {
   const path = new URL(url).pathname
@@ -197,7 +217,8 @@ export function assetBasename(url: string): string {
  */
 export function resolveManagedTarget(config: Config): ManagedTarget {
   const { dataRoot } = config
-  const binaryPath = config.serverBinaryPath ?? (dataRoot !== undefined ? join(dataRoot, 'bin', 'rs-server') : undefined)
+  const binaryUrl = config.binaryDownloadUrl ?? (dataRoot !== undefined ? platformBinaryUrl() : undefined)
+  const binaryPath = config.serverBinaryPath ?? (dataRoot !== undefined ? join(dataRoot, 'bin', serverBinaryName()) : undefined)
   const model = resolveModelAsset(config)
   const modelPath = config.modelPath ?? (dataRoot !== undefined && model.url !== undefined ? join(dataRoot, 'models', model.fileName) : undefined)
   if (binaryPath === undefined || modelPath === undefined) {
@@ -209,7 +230,8 @@ export function resolveManagedTarget(config: Config): ManagedTarget {
   return {
     binaryPath,
     modelPath,
-    canDownloadBinary: config.serverBinaryPath === undefined && dataRoot !== undefined && config.binaryDownloadUrl !== undefined,
+    binaryUrl,
+    canDownloadBinary: config.serverBinaryPath === undefined && binaryUrl !== undefined,
     canDownloadModel: config.modelPath === undefined && dataRoot !== undefined && model.url !== undefined,
   }
 }

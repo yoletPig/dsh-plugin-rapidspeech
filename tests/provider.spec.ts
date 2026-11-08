@@ -11,7 +11,7 @@ const fakeCtx = { logger: { info: () => {}, warn: () => {}, debug: () => {}, err
 /** External-mode lifecycle stand-in: fixed base, no preparation, no ownership. */
 const fakeLifecycle = (url: URL) => ({
   preparation: { snapshot: () => ({ phase: 'ready' as const }), subscribe: () => () => {}, prepare: () => {}, cancel: async () => {} },
-  filesReady: () => true,
+  filesReady: async () => true,
   ensureReady: async () => url,
   run: async <T,>(work: (base: URL) => Promise<T>) => await work(url),
   armIdle: () => {},

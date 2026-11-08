@@ -27,7 +27,6 @@
       config:
         managementMode: managed
         dataRoot: !!js dshHomePath('rapidspeech')
-        binaryDownloadUrl: 'https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/rapidspeech-linux-x64.tar.gz'
         modelId: 'xasr-q8_0'
     - id: api-speech-to-text
       name: '@deepseek-ai/dsh-experimental-api-speech-to-text'

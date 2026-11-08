@@ -25,7 +25,7 @@ dsh --profile rapidspeech
 
 首次点击麦克风旁的"安装"时，插件会（经用户确认后）下载两样东西到 `~/.dsh/rapidspeech/` 缓存：
 
-1. **rs-server 二进制**：来自本仓库 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases)（CI 用 `RS_STATIC_EXE=ON` 构建的**自包含静态二进制**，约 5 MB，仅依赖系统 glibc/libstdc++/libgomp，在 ubuntu-22.04 上构建、glibc ≥ 2.35 可用）
+1. **rs-server 二进制**：来自本仓库 [Releases](https://github.com/yoletPig/dsh-plugin-rapidspeech/releases)，按 `process.platform/arch` 自动选择资产（`rapidspeech-linux-x64.tar.gz` / `rapidspeech-win32-x64.tar.gz`）。CI 用 `RS_STATIC_EXE=ON` 构建**自包含静态二进制**：Linux 约 5 MB（仅依赖 glibc/libstdc++/libgomp，glibc ≥ 2.35），Windows 为 `rs-server.exe`（MSVC /MT 静态 CRT，无 vcruntime 依赖）
 2. **模型 GGUF**：默认 `xasr-q8_0`（178 MB，ModelScope）；准备 UI 会列出该模型的所有官方镜像供选择，SHA-256 固定校验
 
 ### 模型选择
@@ -70,7 +70,9 @@ Bundle 的 `cordis.patch.yml` 会插入完整语音输入组合：`speech-to-tex
 
 ## 构建自己的原生二进制
 
-仓库带 CI（`.github/workflows/build-native.yml`）：推送 `v*` tag 或手动触发，即从上游 RapidSpeech.cpp（含 ggml/cppjieba 子模块）以静态模式构建自包含的 rs-server，打包为 `rapidspeech-linux-x64.tar.gz` 并上传 Release。`binaryDownloadUrl` 指向 `releases/latest/download/...`，发新版只需打 tag。`serverLibraryPath` 仅在用户自备动态链接 rs-server 时需要（静态二进制无外部 .so）。
+仓库带 CI（`.github/workflows/build-native.yml`）：推送 `v*` tag 或手动触发，即从上游 RapidSpeech.cpp（含 ggml/cppjieba 子模块）为 linux-x64 与 win32-x64 各构建一个自包含二进制，打包上传 Release。插件默认按平台拼资产 URL（`binaryDownloadUrl` 可覆盖）。发新版只需打 tag。
+
+**升级检测**：下载时记录资产的 ETag，之后每次准备前 HEAD 对比——`releases/latest` 内容更新后，Provider 会转为"未就绪"并经用户确认升级，绝不静默重下载（模型同理，按钉住的 SHA-256 检测）。
 
 ## 配置（cordis.patch.yml / profile 层可覆盖）
 
@@ -248,11 +250,13 @@ dsh --profile rapidspeech \
 | §9.2 平台发布矩阵 | ◐ Linux x64：CI 构建 + Release 资产 + HF 模型下载就绪；Windows x64 待原生包（CI 矩阵加一个 job 即可） |
 | §10 测试 | ✅ 单测 41 项；模型目录/下载源/生命周期/格式边界/安全/取消均有覆盖 |
 
-## Windows 适配规划（V2）
+## Windows 适配状态（V3）
 
-- 本插件代码不含平台分支：Node 层跨平台，主要工作是 rs-server 的 Windows 构建（MSVC，设计文档 §7）与 V2 的 `lifecycle.ts` 进程托管（按 `process.platform` 选择二进制、Windows 子进程树终止）。
-- 打包时把 `rs-server.exe` + 模型下载策略放进 `native/`（设计文档 §5 的 `native/win32-x64`）。
-- 需注意 MSVC runtime、路径空格、杀毒误报（§9.2）。
+- ✅ 插件代码平台无关：URL 按平台拼装、`rs-server.exe` 文件名、Windows 下跳过 `LD_LIBRARY_PATH`
+- ✅ CI `win32-x64` job：windows-latest + MSVC 静态 CRT（`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`）构建 `rs-server.exe`，打包 `rapidspeech-win32-x64.tar.gz` 上传 Release
+- ✅ 进程终止经 dsh 的 subprocess 服务（win32-process，Job 对象管理子进程树）
+- ⏳ **待真机验收**：本环境是 WSL，rs-server.exe 的实际运行、下载流程与麦克风链路需要在一台 Windows 上跑一遍（`dsh --profile rapidspeech` 即可复用同一套流程）
+- 需注意：杀毒软件可能拦截未签名 exe（设计文档 §9.2）；如遇拦截，把 `~/.dsh/rapidspeech/bin` 加入白名单
 
 ## 许可
 

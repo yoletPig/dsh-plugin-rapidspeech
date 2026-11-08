@@ -21,6 +21,9 @@ let assetBase = ''
 const modelBytes = Buffer.alloc(1024 * 1024, 9)
 const modelSha256 = createHash('sha256').update(modelBytes).digest('hex')
 
+/** Mutable asset routes; tests repoint paths to simulate release updates. */
+const routes = new Map<string, Buffer>()
+
 beforeAll(async () => {
   workspace = await mkdtemp(join(tmpdir(), 'rapidspeech-dl-src-'))
   cache = await mkdtemp(join(tmpdir(), 'rapidspeech-dl-cache-'))
@@ -34,13 +37,16 @@ beforeAll(async () => {
   await new Promise<void>((resolve, reject) => {
     execFile('tar', ['-czf', tarball, '-C', binDir, 'rs-server'], error => { error == null ? resolve() : reject(error) })
   })
-  const tarballBytes = await import('node:fs/promises').then(fs => fs.readFile(tarball))
+  routes.set('/pkg/rapidspeech-linux-x64.tar.gz', await import('node:fs/promises').then(fs => fs.readFile(tarball)))
+  routes.set('/models/sense-voice.gguf', modelBytes)
   assetServer = createServer((request, response) => {
-    const body = request.url === '/pkg/rapidspeech-linux-x64.tar.gz' ? tarballBytes
-      : request.url === '/models/sense-voice.gguf' ? modelBytes
-      : null
-    if (body === null) { response.writeHead(404); response.end(); return }
-    response.writeHead(200, { 'content-length': String(body.length) })
+    const route = request.url === undefined ? undefined : request.url.split('?')[0]
+    const body = route !== undefined ? routes.get(route) : undefined
+    if (body === undefined) { response.writeHead(404); response.end(); return }
+    // Content-derived etag: changing an asset's bytes changes its tag, exactly
+    // what the lifecycle's update detection compares against.
+    const etag = `"${createHash('sha256').update(body).digest('hex').slice(0, 16)}"`
+    response.writeHead(200, { 'content-length': String(body.length), etag })
     response.end(body)
   })
   const server = assetServer!
@@ -118,7 +124,7 @@ describe('managed download flow', () => {
 
   it('downloads missing assets, publishes progress, and reaches ready', async () => {
     const lifecycle = createLifecycle(fakeCtx(children), downloadConfig())
-    expect(lifecycle.filesReady()).toBe(false)
+    expect(await lifecycle.filesReady()).toBe(false)
     const phases: string[] = []
     lifecycle.preparation.subscribe(() => { phases.push(lifecycle.preparation.snapshot().phase) })
     const base = await lifecycle.ensureReady(new AbortController().signal)
@@ -126,7 +132,7 @@ describe('managed download flow', () => {
     expect(phases).toContain('downloading')
     expect(lifecycle.preparation.snapshot()).toMatchObject({ phase: 'ready' })
     // The cache now holds the extracted binary and the verified model.
-    expect(lifecycle.filesReady()).toBe(true)
+    expect(await lifecycle.filesReady()).toBe(true)
     const transcript = await lifecycle.run(async url => {
       const form = new FormData()
       form.set('file', new Blob([pcmWav({ frames: 8000 })], { type: 'audio/wav' }), 'clip.wav')
@@ -153,6 +159,36 @@ describe('managed download flow', () => {
     const lifecycle = createLifecycle(fakeCtx(children), downloadConfig({ dataRoot: cache }))
     const base = await lifecycle.ensureReady(new AbortController().signal)
     expect(base.hostname).toBe('127.0.0.1')
+    await lifecycle.dispose()
+  })
+
+  it('refreshes the cache when the binary asset changes, gated behind filesReady', async () => {
+    // A second release asset whose wrapper pins a different transcript text.
+    const v2Dir = join(workspace, 'pkg-v2')
+    await mkdir(v2Dir, { recursive: true })
+    const wrapperV2 = ['#!/usr/bin/env bash', `exec node ${JSON.stringify(FAKE_SERVER)} --text "v2 transcript" "$@"`, ''].join('\n')
+    await writeFile(join(v2Dir, 'rs-server'), wrapperV2).then(() => chmod(join(v2Dir, 'rs-server'), 0o755))
+    const v2Tarball = join(workspace, 'rapidspeech-linux-x64-v2.tar.gz')
+    await new Promise<void>((resolve, reject) => {
+      execFile('tar', ['-czf', v2Tarball, '-C', v2Dir, 'rs-server'], error => { error == null ? resolve() : reject(error) })
+    })
+    routes.set('/pkg/rapidspeech-linux-x64.tar.gz', await import('node:fs/promises').then(fs => fs.readFile(v2Tarball)))
+
+    const lifecycle = createLifecycle(fakeCtx(children), downloadConfig({ dataRoot: cache }))
+    // The configured URL moved, so the warm cache reads as stale: the update
+    // goes through the consent gate instead of silently re-downloading.
+    expect(await lifecycle.filesReady()).toBe(false)
+    await lifecycle.ensureReady(new AbortController().signal)
+    expect(await lifecycle.filesReady()).toBe(true)
+    const text = await lifecycle.run(async url => {
+      const form = new FormData()
+      form.set('file', new Blob([pcmWav({ frames: 8000 })], { type: 'audio/wav' }), 'clip.wav')
+      form.set('model', 'rapidspeech-asr')
+      const response = await fetch(new URL('/v1/audio/transcriptions', url), { method: 'POST', body: form })
+      if (!response.ok) throw new Error(`probe HTTP ${response.status}`)
+      return (await response.json() as { text: string }).text
+    })
+    expect(text).toBe('v2 transcript')
     await lifecycle.dispose()
   })
 })

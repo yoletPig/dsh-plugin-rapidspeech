@@ -2,8 +2,8 @@
 import { createHash } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { accessSync, constants as fsConstants, existsSync, statSync } from 'node:fs'
-import { open, rm } from 'node:fs/promises'
+import { accessSync, constants as fsConstants, existsSync, readFileSync, statSync } from 'node:fs'
+import { mkdir, open, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: pulls the `subprocess` service declaration mounted by the base bundle.
@@ -11,8 +11,17 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SpeechPreparation, SpeechPreparationState } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
 import { assetBasename, resolveManagedTarget, resolveModelAsset, type Config } from './config.js'
-import { downloadFile, extractTarGz } from './download.js'
+import { downloadFile, extractTarGz, type DownloadOutcome } from './download.js'
 import { selectSource } from './models.js'
+
+/** Persisted download facts for the managed cache; drives update detection. */
+interface CacheMeta {
+  readonly binaryUrl?: string
+  /** ETag/Last-Modified captured at download time; detects new releases at the same URL. */
+  readonly binaryTag?: string
+  readonly modelSha?: string
+  readonly updatedAt?: string
+}
 
 /** The slice of `ctx.subprocess` this module uses; structural so tests can fake it. */
 export interface SubprocessSpawner {
@@ -23,8 +32,12 @@ export interface SubprocessSpawner {
 export interface RapidspeechLifecycle {
   /** Host-owned preparation state for the provider roster UI; absent in external mode. */
   readonly preparation: SpeechPreparation
-  /** Whether the binary and model already exist locally; gates download-free auto-preparation. */
-  filesReady(): boolean
+  /**
+   * Whether the binary and model already exist locally and match the configured
+   * origins/hashes; gates download-free auto-preparation. Includes one HEAD
+   * probe of the binary URL, so treat it as a startup-time check.
+   */
+  filesReady(): Promise<boolean>
   /**
    * Return a healthy base URL, preparing the managed server on demand.
    * Concurrent callers join the running task; each caller's own abort still applies.
@@ -57,7 +70,7 @@ function externalLifecycle(config: Config): RapidspeechLifecycle {
   const base = new URL(config.endpoint)
   return {
     preparation: { snapshot: () => ({ phase: 'ready' }), subscribe: () => () => {}, prepare: () => {}, cancel: async () => {} },
-    filesReady: () => true,
+    filesReady: async () => true,
     async ensureReady() { return base },
     async run(work) { return await work(base) },
     armIdle() {},
@@ -69,6 +82,7 @@ function externalLifecycle(config: Config): RapidspeechLifecycle {
 function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
   const target = resolveManagedTarget(config)
   const model = resolveModelAsset(config)
+  const metaPath = config.dataRoot !== undefined ? join(config.dataRoot, 'cache-meta.json') : undefined
   let state: SpeechPreparationState = { phase: 'unprepared' }
   const listeners = new Set<() => void>()
   let handle: SubprocessHandle | undefined
@@ -80,6 +94,49 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
   let admissionClosed = false
   const active = new Set<Promise<unknown>>()
   let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  const readMeta = (): CacheMeta | undefined => {
+    if (metaPath === undefined || !existsSync(metaPath)) return undefined
+    try {
+      return JSON.parse(readFileSync(metaPath, 'utf8')) as CacheMeta
+    } catch {
+      return undefined
+    }
+  }
+
+  let binaryTag: string | undefined
+  const writeMeta = async (): Promise<void> => {
+    if (metaPath === undefined) return
+    await mkdir(dirname(metaPath), { recursive: true })
+    const meta: CacheMeta = {
+      ...(target.binaryUrl !== undefined ? { binaryUrl: target.binaryUrl, ...(binaryTag !== undefined ? { binaryTag } : {}) } : {}),
+      ...(model.sha256 !== undefined ? { modelSha: model.sha256 } : {}),
+      updatedAt: new Date().toISOString(),
+    }
+    await writeFile(metaPath, JSON.stringify(meta, null, 1))
+  }
+
+  /**
+   * Whether the cached assets no longer match the configured origins/hashes.
+   * Absent metadata (caches written before this field existed) counts as
+   * fresh, so upgrades never trigger a surprise re-download. The binary
+   * compare includes a HEAD probe because the default URL ("latest") keeps
+   * its name across releases; the model is pinned by hash instead.
+   */
+  const cacheStale = async (signal: AbortSignal): Promise<boolean> => {
+    const meta = readMeta()
+    if (meta === undefined) return false
+    if (config.serverBinaryPath === undefined && target.binaryUrl !== undefined) {
+      if (meta.binaryUrl !== undefined && meta.binaryUrl !== target.binaryUrl) return true
+      if (meta.binaryTag !== undefined) {
+        const current = await probeBinaryTag(target.binaryUrl, signal)
+        if (current !== undefined && current !== meta.binaryTag) return true
+      }
+    }
+    if (config.modelPath === undefined && model.sha256 !== undefined
+      && meta.modelSha !== undefined && meta.modelSha !== model.sha256) return true
+    return false
+  }
 
   const publish = (next: SpeechPreparationState): void => {
     state = next
@@ -122,9 +179,9 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
 
   /** Download one asset, publishing byte progress; verified and atomic inside downloadFile. */
   const downloadAsset = async (url: string, destination: string, resource: string,
-    signal: AbortSignal, sha256?: string): Promise<void> => {
+    signal: AbortSignal, sha256?: string): Promise<DownloadOutcome> => {
     publish({ phase: 'downloading', resource, completedBytes: 0 })
-    await downloadFile(url, destination, {
+    return await downloadFile(url, destination, {
       signal,
       timeoutMs: config.downloadTimeoutMs,
       sha256,
@@ -135,29 +192,42 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
     })
   }
 
-  /** Fetch whichever managed asset is missing; existing files never re-download. */
+  /** Fetch whichever managed asset is missing or stale; fresh matching files never re-download. */
   const ensureAssets = async (signal: AbortSignal): Promise<void> => {
-    if (!existsSync(target.binaryPath)) {
+    let updated = false
+    const binaryMissing = !existsSync(target.binaryPath)
+    const binaryStale = binaryMissing
+      || (config.serverBinaryPath === undefined && target.binaryUrl !== undefined
+        && await cacheStale(signal))
+    if (binaryStale) {
       if (!target.canDownloadBinary) {
         throw new Error(`RapidSpeech server binary is missing: ${target.binaryPath} (set serverBinaryPath, or dataRoot with binaryDownloadUrl)`)
       }
-      const archive = join(config.dataRoot!, 'bin', assetBasename(config.binaryDownloadUrl!))
-      await downloadAsset(config.binaryDownloadUrl!, archive, 'rs-server binary', signal, config.binaryDownloadSha256)
+      if (existsSync(target.binaryPath)) await rm(target.binaryPath, { force: true })
+      const archive = join(config.dataRoot!, 'bin', assetBasename(target.binaryUrl!))
+      const outcome = await downloadAsset(target.binaryUrl!, archive, 'rs-server binary', signal, config.binaryDownloadSha256)
       await extractTarGz(archive, dirname(target.binaryPath))
       await rm(archive, { force: true })
       if (!existsSync(target.binaryPath)) {
-        throw new Error(`Downloaded archive did not contain rs-server at its root: ${config.binaryDownloadUrl}`)
+        throw new Error(`Downloaded archive did not contain the server executable at its root: ${target.binaryUrl}`)
       }
+      binaryTag = outcome.tag
+      updated = true
     }
-    if (!existsSync(target.modelPath)) {
+    const modelStale = !existsSync(target.modelPath)
+      || (config.modelPath === undefined && model.sha256 !== undefined && readMeta()?.modelSha !== undefined && readMeta()?.modelSha !== model.sha256)
+    if (modelStale) {
       if (!target.canDownloadModel || model.url === undefined) {
         throw new Error(`RapidSpeech model is missing: ${target.modelPath} (set modelPath, or dataRoot with modelId/modelDownloadUrl)`)
       }
       // The UI's origin choice pins one source; an origin that does not serve this
       // model fails without fallback. Manual URLs have no advertised sources.
       const url = model.sources.length > 0 ? selectSource(model.catalog!, downloadSource).url : model.url
+      if (existsSync(target.modelPath)) await rm(target.modelPath, { force: true })
       await downloadAsset(url, target.modelPath, model.displayName, signal, model.sha256)
+      updated = true
     }
+    if (updated) await writeMeta()
   }
 
   const startPrepare = (signal: AbortSignal): Promise<URL> => {
@@ -190,6 +260,9 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
         }
         base = candidate
         publish({ phase: 'ready' })
+        // The idle clock starts even without a first transcription; a prepared
+        // server that nobody uses must still be reclaimed.
+        armIdle()
         // An unexpected exit (crash, OOM) becomes standby so the next use respawns.
         void spawned.done.then(() => { onExit(spawned) }, () => { onExit(spawned) })
         return candidate
@@ -280,6 +353,15 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
     }
   }
 
+  /** Schedule idle reclamation; a no-op while transcriptions are in flight. */
+  const armIdle = (): void => {
+    clearTimeout(idleTimer)
+    if (config.idleTimeoutMs === 0 || handle === undefined || active.size > 0) return
+    idleTimer = setTimeout(() => {
+      void stop().catch((error: unknown) => { ctx.logger.warn('RapidSpeech idle stop failed', error) })
+    }, config.idleTimeoutMs)
+  }
+
   const preparation: SpeechPreparation = {
     snapshot: () => state,
     subscribe: (listener) => {
@@ -304,7 +386,10 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
 
   return {
     preparation,
-    filesReady: () => existsSync(target.binaryPath) && existsSync(target.modelPath),
+    // Stale caches read as not-ready so an updated release/model goes through
+    // the preparation UI's consent step instead of silently re-downloading.
+    filesReady: async () =>
+      existsSync(target.binaryPath) && existsSync(target.modelPath) && !(await cacheStale(new AbortController().signal)),
     ensureReady,
     async run(work) {
       const ready = await ensureReady(new AbortController().signal)
@@ -316,13 +401,7 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
         active.delete(promise)
       }
     },
-    armIdle() {
-      clearTimeout(idleTimer)
-      if (config.idleTimeoutMs === 0 || handle === undefined || active.size > 0) return
-      idleTimer = setTimeout(() => {
-        void stop().catch((error: unknown) => { ctx.logger.warn('RapidSpeech idle stop failed', error) })
-      }, config.idleTimeoutMs)
-    },
+    armIdle,
     async dispose() {
       admissionClosed = true
       prepareController?.abort(new Error('RapidSpeech provider disposed'))
@@ -330,6 +409,21 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
       await stop()
       listeners.clear()
     },
+  }
+}
+
+/** HEAD one asset for its change tag; network failures read as "cannot tell", never stale. */
+async function probeBinaryTag(url: string, signal: AbortSignal): Promise<string | undefined> {
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+      redirect: 'follow',
+    })
+    await response.body?.cancel()
+    return response.headers.get('etag') ?? response.headers.get('last-modified') ?? undefined
+  } catch {
+    return undefined
   }
 }
 

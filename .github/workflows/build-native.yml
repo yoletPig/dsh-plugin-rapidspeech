@@ -65,3 +65,47 @@ jobs:
           # Appends GitHub's auto "What's Changed" (commits since the last tag)
           # below the curated notes.
           generate_release_notes: true
+
+  win32-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Checkout RapidSpeech.cpp (with ggml and cppjieba submodules)
+        run: git clone --depth 1 --recursive --shallow-submodules https://github.com/RapidAI/RapidSpeech.cpp.git upstream
+
+      - name: Configure and build rs-server.exe
+        run: |
+          cd upstream
+          cmake -B build -DRS_STATIC_EXE=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build --target rs-server --config Release -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Package the self-contained binary (flat archive root)
+        shell: pwsh
+        run: |
+          # MSVC is a multi-config generator: the exe lands in build\Release\.
+          New-Item -ItemType Directory -Force -Path pkg | Out-Null
+          Copy-Item upstream\build\Release\rs-server.exe pkg\
+          Copy-Item upstream\LICENSE pkg\
+          tar -czf rapidspeech-win32-x64.tar.gz -C pkg rs-server.exe LICENSE
+          Get-FileHash rapidspeech-win32-x64.tar.gz
+
+      - name: Smoke test the packaged binary
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\pkgcheck\bin | Out-Null
+          tar -xzf rapidspeech-win32-x64.tar.gz -C C:\pkgcheck\bin
+          & C:\pkgcheck\bin\rs-server.exe --help | Out-Null
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rapidspeech-win32-x64
+          path: rapidspeech-win32-x64.tar.gz
+
+      - name: Attach to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: rapidspeech-win32-x64.tar.gz
+          body_path: release-notes.md
+          generate_release_notes: true

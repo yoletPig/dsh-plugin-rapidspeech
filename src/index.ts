@@ -27,9 +27,11 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.info('RapidSpeech provider %s registered (%s mode)', config.providerId, config.managementMode)
     const unregister = ctx.speechToText.register(provider)
     // Managed mode walks the design-doc startup path immediately when the assets are
-    // already on disk. Missing assets stay `unprepared` so the first download waits
-    // for the user's explicit consent in the preparation UI.
-    if (config.managementMode === 'managed' && lifecycle.filesReady()) lifecycle.preparation.prepare()
+    // already on disk and current. Missing or updated assets stay `unprepared` so the
+    // first download/upgrade waits for the user's explicit consent in the preparation UI.
+    if (config.managementMode === 'managed') {
+      void lifecycle.filesReady().then(ready => { if (ready) lifecycle.preparation.prepare() })
+    }
     // Deregistration first lets in-flight transcriptions settle against a live server;
     // lifecycle teardown afterwards kills only the process this plugin spawned.
     return async () => {
