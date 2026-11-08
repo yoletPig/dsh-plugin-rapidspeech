@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-rapidspeech",
   "description": "Local RapidSpeech.cpp ASR provider for the DeepSeek Harness voice input; managed rs-server with on-demand download, or external mode",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
