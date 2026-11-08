@@ -70,6 +70,36 @@ dsh plugin --profile rapidspeech add .\dsh-plugin-rapidspeech
 
 之后完全离线运行；空闲 5 分钟自动回收进程，下次使用自动唤醒（约 2 秒）。
 
+### npm 包与插件市场
+
+发布 npm 后（见下），CLI 安装可简化为：
+
+```powershell
+dsh plugin --profile rapidspeech add dsh-plugin-rapidspeech
+```
+
+让插件出现在 Web/Desktop 的**插件市场 UI** 里：市场读取"索引源"，把本仓库的索引加入即可（Releases 里的 `market-index.json` 随每次发版更新）：
+
+```
+https://github.com/yoletPig/dsh-plugin-rapidspeech/releases/latest/download/market-index.json
+```
+
+在市场的设置/索引管理里添加上述 URL（格式为 plugin market index format 1，`scripts/gen-market-index.mjs` 生成）。
+
+**仓库主发布流程**（二选一）：
+
+```bash
+# 手动：WSL/任意有 Node 的环境
+npm login        # 浏览器完成认证，一次性
+npm publish      # prepare 自动构建 lib/
+```
+
+```text
+# 自动：GitHub 仓库 Settings → Secrets and variables → Actions
+#   添加 NPM_TOKEN（npm 网站生成的 Automation token）
+# 之后 push v* tag 即由 publish-npm.yml 自动 npm publish + 更新索引
+```
+
 ### 使用自备的 rs-server / 模型（external 模式）
 
 ```bash
