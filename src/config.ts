@@ -1,5 +1,7 @@
 /** Deployment configuration for the local RapidSpeech.cpp transcription provider. */
 import { basename, isAbsolute, join } from 'node:path'
+import { isVolatile, type Volatile } from '@deepseek-ai/cosmokit'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import z from '@deepseek-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from './limits.js'
 import { CATALOG_IDS, catalogEntry, type ModelDownloadSource } from './models.js'
@@ -19,17 +21,21 @@ export interface Config {
   endpoint: string
   /** Absolute rs-server executable; required in `managed` mode. */
   serverBinaryPath?: string | undefined
-  /** Absolute ASR GGUF model file; required in `managed` mode. */
+  /** Absolute ASR GGUF model file; editable live from the plugin page, overriding `modelId`. */
   modelPath?: string | undefined
-  /** Absolute cache directory for downloaded binary and model; enables auto-download in `managed` mode. */
+  /**
+   * Absolute cache directory for downloaded binary and model; enables auto-download in
+   * `managed` mode. Defaults to the dsh home cache so catalog models stay switchable
+   * even when a patch layer replaces the row's whole config.
+   */
   dataRoot?: string | undefined
   /** Tarball URL for the platform rs-server; used when the binary is missing from `dataRoot`. */
   binaryDownloadUrl?: string | undefined
   /** Expected SHA-256 of the downloaded binary tarball; omission skips archive verification. */
   binaryDownloadSha256?: string | undefined
-  /** GGUF URL used when `modelPath` is absent; takes precedence over `modelId` when set. */
+  /** GGUF URL used when `modelPath` is absent; editable live from the plugin page. */
   modelDownloadUrl?: string | undefined
-  /** Built-in catalog model to download when `modelPath`/`modelDownloadUrl` are absent. */
+  /** Built-in catalog model to download when `modelPath`/`modelDownloadUrl` are absent; editable live. */
   modelId: string
   /** Directory holding rs-server's shared libraries; defaults to the binary's directory. */
   serverLibraryPath?: string | undefined
@@ -61,21 +67,28 @@ export interface Config {
   maxLogBytes: number
 }
 
-/** Validate deployment-varying choices at plugin activation; invalid rows fail the load. */
-export const Config: z<Partial<Config>, Config> = z.object({
+/**
+ * Validate deployment-varying choices at plugin activation; invalid rows fail the load.
+ * The four model-selection fields are volatile: the plugin page rewrites them while the
+ * row stays mounted, and the provider hot-swaps the model instead of restarting dsh.
+ */
+// The inferred schemastery types fight `exactOptionalPropertyTypes` over the volatile
+// fields' meta defaults; the load-bearing types are `LoaderConfig` (apply boundary)
+// and `Config` (everything downstream), so the annotation keeps the output side only.
+export const Config: z<any, LoaderConfig> = z.object({
   providerId: z.string().min(1).default('rapidspeech-local'),
   displayName: z.string().min(1).default('RapidSpeech (local)'),
   managementMode: z.union(['external', 'managed']).default('external'),
   endpoint: z.string().min(1).pattern(/^https?:\/\//).default('http://127.0.0.1:8080'),
   serverBinaryPath: z.union([z.string().min(1), z.const(undefined)]),
-  modelPath: z.union([z.string().min(1), z.const(undefined)]),
-  dataRoot: z.union([z.string().min(1), z.const(undefined)]),
+  modelPath: z.union([z.string().min(1), z.const(undefined)]).volatile(),
+  dataRoot: z.union([z.string().min(1), z.const(undefined)]).default(dshHomePath('rapidspeech')),
   binaryDownloadUrl: z.union([z.string().pattern(/^https:\/\//), z.const(undefined)]),
   binaryDownloadSha256: z.union([z.string().pattern(/^[\da-f]{64}$/), z.const(undefined)]),
-  modelDownloadUrl: z.union([z.string().pattern(/^https:\/\//), z.const(undefined)]),
-  modelId: z.string().min(1).default('xasr-q8_0'),
+  modelDownloadUrl: z.union([z.string().pattern(/^https:\/\//), z.const(undefined)]).volatile(),
+  modelId: z.string().min(1).default('xasr-q8_0').volatile(),
   serverLibraryPath: z.union([z.string().min(1), z.const(undefined)]),
-  modelSha256: z.union([z.string().pattern(/^[\da-f]{64}$/), z.const(undefined)]),
+  modelSha256: z.union([z.string().pattern(/^[\da-f]{64}$/), z.const(undefined)]).volatile(),
   extraServerArgs: z.array(z.string().min(1)).default([]),
   model: z.string().min(1).default('rapidspeech-asr'),
   languages: z.array(z.string().min(1)).min(1)
@@ -116,6 +129,49 @@ export function resolveEndpoint(endpoint: string, allowedHosts: readonly string[
     throw new Error(`RapidSpeech endpoint must be a local service or listed in allowedHosts: ${host}`)
   }
   return url
+}
+
+/** Config fields the plugin page rewrites while the row stays mounted. */
+export const VOLATILE_MODEL_KEYS = ['modelId', 'modelPath', 'modelDownloadUrl', 'modelSha256'] as const
+
+/** One volatile field name. */
+export type VolatileModelKey = typeof VOLATILE_MODEL_KEYS[number]
+
+/**
+ * The config as the Loader hands it to `apply`: the four model-selection fields are
+ * live cells (committed in place by `loader/volatile-update`), everything else is plain.
+ */
+export type LoaderConfig = Omit<Config, VolatileModelKey> & {
+  modelId: Volatile<string>
+  modelPath: Volatile<string | undefined>
+  modelDownloadUrl: Volatile<string | undefined>
+  modelSha256: Volatile<string | undefined>
+}
+
+/** Read one maybe-volatile field as its current plain snapshot. */
+function plainValue<T>(value: T | Volatile<T>): T {
+  return (isVolatile(value) ? value.get() : value) as T
+}
+
+/**
+ * Unwrap volatile references into a plain config snapshot. The Loader hands volatile
+ * fields to `apply` as live cells; every resolver and provider below wants plain values.
+ * @param config - the raw context config as delivered by the Loader.
+ * @returns a detached snapshot safe to keep across the model switch.
+ */
+export function snapshotConfig(config: LoaderConfig): Config {
+  return {
+    ...config,
+    modelId: plainValue(config.modelId),
+    modelPath: plainValue(config.modelPath),
+    modelDownloadUrl: plainValue(config.modelDownloadUrl),
+    modelSha256: plainValue(config.modelSha256),
+  }
+}
+
+/** Whether two config snapshots disagree on any model-selection field. */
+export function modelSelectionChanged(before: Config, after: Config): boolean {
+  return VOLATILE_MODEL_KEYS.some(key => before[key] !== after[key])
 }
 
 /** Where the managed server's assets live and whether each can be downloaded. */
