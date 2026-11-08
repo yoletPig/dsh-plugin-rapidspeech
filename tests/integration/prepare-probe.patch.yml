@@ -1,0 +1,9 @@
+# Real-network first-user flow: fresh profile, bundle defaults, real downloads.
+- insert:
+    - id: webserver
+      disabled: true
+    - id: web-runtime
+      disabled: true
+    - id: rapidspeech-prepare-probe
+      name: './prepare-probe.mjs'
+      config: {}

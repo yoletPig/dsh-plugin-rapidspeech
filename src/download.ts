@@ -75,8 +75,16 @@ export async function downloadFile(url: string, destination: string, options: Do
         hash.update(bytes)
         if (!writer.write(bytes)) {
           await new Promise<void>((resolve, reject) => {
-            writer.once('drain', resolve)
-            writer.once('error', reject)
+            // Remove both listeners when either fires; error listeners would
+            // otherwise accumulate across every backpressure pause.
+            const onDrain = (): void => { cleanup(); resolve() }
+            const onError = (error: Error): void => { cleanup(); reject(error) }
+            const cleanup = (): void => {
+              writer.off('drain', onDrain)
+              writer.off('error', onError)
+            }
+            writer.once('drain', onDrain)
+            writer.once('error', onError)
           })
         }
         if (onProgress !== undefined && Date.now() - lastReport > 200) {
