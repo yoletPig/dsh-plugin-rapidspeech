@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: pulls the `subprocess` service declaration mounted by the base bundle.
 import type {} from '@deepseek-ai/dsh-subprocess'
-import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
+import type { SubprocessHandle, SubprocessOutcome, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SpeechPreparation, SpeechPreparationState } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
 import { assetBasename, resolveManagedTarget, resolveModelAsset, type Config } from './config.js'
 import { downloadFile, extractTarGz, type DownloadOutcome } from './download.js'
@@ -346,7 +346,15 @@ function managedLifecycle(ctx: Context, config: Config): RapidspeechLifecycle {
         spawned.done.then(() => ({ exited: true as const }), () => ({ exited: true as const })),
       ])
       if ('exited' in settled) {
-        throw new Error(`RapidSpeech server exited during startup: ${await stderrTail(spawned)}`)
+        // Windows crashes report as exit codes (0xC0000005 access violation,
+        // 0xC000001D illegal instruction); surface them next to the stderr tail.
+        const outcome: SubprocessOutcome | undefined = await spawned.done.catch(() => undefined)
+        const code = outcome !== undefined && outcome.exitCode !== undefined && outcome.exitCode !== null
+          ? `exit code ${outcome.exitCode}` +
+            (outcome.exitCode < 0 ? ` (0x${(outcome.exitCode >>> 0).toString(16).toUpperCase()})` : '')
+          : outcome !== undefined && outcome.signal !== null && outcome.signal !== undefined ? `signal ${outcome.signal}`
+          : 'unknown cause'
+        throw new Error(`RapidSpeech server exited during startup (${code}): ${await stderrTail(spawned)}`)
       }
       if (settled.healthy) return
       await new Promise(resolve => { setTimeout(resolve, HEALTH_INTERVAL_MS) })
